@@ -1,18 +1,16 @@
-class ParseNoneError(Exception):
+class MissingVariableError(SystemExit):
+    """Программа завершит работу если нет переменной в .env."""
+
     pass
 
 
-class MissingVariableError(Exception):
-    pass
+class EmptyResponseAPIError(Exception):
+    """Ответ API пуст."""
 
-
-class ResponseError(Exception):
     pass
 
 
 class APIError(Exception):
-    pass
+    """Выбрасывается если статус ответа не 200."""
 
-
-class NotDeliveredError(Exception):
     pass
