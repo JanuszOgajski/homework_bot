@@ -96,23 +96,18 @@ def check_response(response):
 
 def parse_status(homework):
     """Извлекает статус о конкретной домашней работе."""
-    try:
-        if homework['homework_name']:
-            homework_name = homework['homework_name']
-        else:
-            raise KeyError
-        if not homework['status']:
-            raise KeyError('Нет ключа в parse_status')
-        if homework['status'] in HOMEWORK_VERDICTS.keys():
-            verdict = HOMEWORK_VERDICTS[homework['status']]
-        else:
-            raise KeyError
-        logging.debug(f'parse status {homework_name} {verdict}')
-        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
-    except KeyError:
-        pass
-    # ^не могу прям совсем убрать
-    # валится тест test_parse_status_no_homework_name_key
+    if 'homework_name' in homework.keys():
+        homework_name = homework['homework_name']
+    else:
+        raise KeyError('Нет ключа в parse_status')
+    if not homework['status']:
+        raise KeyError('Нет ключа в parse_status')
+    if homework['status'] in HOMEWORK_VERDICTS.keys():
+        verdict = HOMEWORK_VERDICTS[homework['status']]
+    else:
+        raise KeyError('Нет ключа в parse_status')
+    logging.debug(f'parse status {homework_name} {verdict}')
+    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def main():
