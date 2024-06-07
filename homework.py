@@ -9,8 +9,9 @@ from telebot import TeleBot, apihelper
 
 from exceptions import (
     APIError,
+    APIRequestError,
+    EmptyResponseAPIError,
     MissingVariableError,
-    EmptyResponseAPIError
 )
 
 load_dotenv()
@@ -40,7 +41,7 @@ def check_tokens():
         TELEGRAM_CHAT_ID,
     )
     logging.debug('Проверяем токены')
-    if all(tokens) is False:
+    if not all(tokens):
         logging.critical('a required environment variable is None')
         raise MissingVariableError('Нет переменной(-ых) окружения')
 
@@ -64,14 +65,15 @@ def get_api_answer(timestamp):
     api_dict = {
         'url': ENDPOINT,
         'headers': HEADERS,
-        'payload': {'from_date': timestamp}
+        'params': {'from_date': timestamp}
     }
-    result = {}
     try:
-        logging.debug('запрос с параметрами: {0}'.format(api_dict))
-        statuses = requests.get(api_dict.values)
-    except requests.RequestException as error:
-        return error
+        logging.debug(
+            'запрос с параметрами: {url} {headers} {params}'.format(**api_dict)
+        )
+        statuses = requests.get(**api_dict)
+    except requests.RequestException:
+        raise APIRequestError
     if statuses.status_code != HTTPStatus.OK:
         raise APIError('Не получен сатус ответа 200')
     result = statuses.json()
@@ -85,22 +87,29 @@ def check_response(response):
         raise TypeError('в response не передан словарь')
     if 'homeworks' not in response.keys():
         raise EmptyResponseAPIError('в ответе API нет "homeworks"')
-    response = response.get('homeworks')
-    if not isinstance(response, list):
+    homeworks = response.get('homeworks')
+    if not isinstance(homeworks, list):
         raise TypeError('под ключом homeworks не было списка')
-    logging.debug(f'response {response}')
-    return response
+    logging.debug(f'response {homeworks}')
+    return homeworks
 
 
 def parse_status(homework):
     """Извлекает статус о конкретной домашней работе."""
     try:
-        homework_name = homework['homework_name']
+        if homework['homework_name']:
+            homework_name = homework['homework_name']
+        else:
+            raise KeyError
+        if not homework['status']:
+            raise KeyError
         if homework['status'] in HOMEWORK_VERDICTS.keys():
             verdict = HOMEWORK_VERDICTS[homework['status']]
+        else:
+            raise KeyError
+        logging.debug(f'parse status {homework_name} {verdict}')
     except KeyError:
         pass
-    logging.debug(f'parse status {homework_name} {verdict}')
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -118,7 +127,10 @@ def main():
             timestamp = int(response.get('current_date', timestamp))
             logging.debug(f'Установлен таймстемп {timestamp}')
             homework = check_response(response)
-            if len(homework) != 0:
+            updated_status = ''
+            # ^не могу вне цикла поставить
+            # бот один и тот же статус раз в 10 мин присылает
+            if homework:
                 updated_status = parse_status(homework[0])
             else:
                 logging.debug('нет новых статусов')
@@ -126,16 +138,12 @@ def main():
             if updated_status != previous_status:
                 if send_message(bot, updated_status):
                     previous_status = updated_status
-        except EmptyResponseAPIError:
-            logging.debug('нет домашек в ответе')
+        except EmptyResponseAPIError as error:
+            logging.error(f'нет домашек в ответе: {error}')
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            failure_message = message
             logging.error(message)
-
-            if message == failure_message:
-                if send_message(bot, message):
-                    failure_message = message
+            send_message(bot, message)
         finally:
             time.sleep(RETRY_PERIOD)
 
