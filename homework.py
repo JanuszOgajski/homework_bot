@@ -72,10 +72,10 @@ def get_api_answer(timestamp):
             'запрос с параметрами: {url} {headers} {params}'.format(**api_dict)
         )
         statuses = requests.get(**api_dict)
-    except requests.RequestException:
-        raise APIRequestError
+    except requests.RequestException as error:
+        raise APIRequestError(f'Получена ошибка {error}')
     if statuses.status_code != HTTPStatus.OK:
-        raise APIError('Не получен сатус ответа 200')
+        raise APIError('Не получен статус ответа 200')
     result = statuses.json()
     logging.debug(f'api {result}')
     return result
@@ -102,15 +102,17 @@ def parse_status(homework):
         else:
             raise KeyError
         if not homework['status']:
-            raise KeyError
+            raise KeyError('Нет ключа в parse_status')
         if homework['status'] in HOMEWORK_VERDICTS.keys():
             verdict = HOMEWORK_VERDICTS[homework['status']]
         else:
             raise KeyError
         logging.debug(f'parse status {homework_name} {verdict}')
+        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
     except KeyError:
         pass
-    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+    # ^не могу прям совсем убрать
+    # валится тест test_parse_status_no_homework_name_key
 
 
 def main():
@@ -124,12 +126,10 @@ def main():
     while True:
         try:
             response = get_api_answer(timestamp)
-            timestamp = int(response.get('current_date', timestamp))
+            timestamp = response.get('current_date', timestamp)
             logging.debug(f'Установлен таймстемп {timestamp}')
             homework = check_response(response)
             updated_status = ''
-            # ^не могу вне цикла поставить
-            # бот один и тот же статус раз в 10 мин присылает
             if homework:
                 updated_status = parse_status(homework[0])
             else:
@@ -143,7 +143,9 @@ def main():
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logging.error(message)
-            send_message(bot, message)
+            if previous_status != message:
+                send_message(bot, message)
+                previous_status = ''
         finally:
             time.sleep(RETRY_PERIOD)
 
